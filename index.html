@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Christian & Katie's Dinner & Grocery Planner</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#10B981',
+                        secondary: '#4F46E5',
+                        accent: '#F59E0B'
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gray-50 text-gray-800 pb-24 font-sans select-none">
+
+    <!-- Header -->
+    <header class="bg-emerald-600 text-white shadow-md sticky top-0 z-50">
+        <div class="max-w-md mx-auto px-4 py-3 flex justify-between items-center">
+            <h1 class="text-xl font-bold flex items-center gap-2">
+                <i class="fa-solid fa-utensils"></i> Christian & Katie
+            </h1>
+            <div id="sync-status" class="text-xs bg-emerald-700 px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-inner">
+                <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse" id="sync-dot"></span>
+                <span id="sync-text">Connecting...</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="max-w-md mx-auto px-4 pt-4">
+
+        <!-- Tab Navigation -->
+        <div class="flex bg-white rounded-xl shadow-sm p-1 mb-5 border border-gray-100">
+            <button onclick="switchTab('planner')" id="btn-planner" class="flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center justify-center gap-2 bg-emerald-600 text-white shadow-sm">
+                <i class="fa-solid fa-calendar-days"></i> Dinners
+            </button>
+            <button onclick="switchTab('recipes')" id="btn-recipes" class="flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center justify-center gap-2 text-gray-600 hover:text-gray-900">
+                <i class="fa-solid fa-book-open"></i> Recipes
+            </button>
+            <button onclick="switchTab('grocery')" id="btn-grocery" class="flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center justify-center gap-2 text-gray-600 hover:text-gray-900">
+                <i class="fa-solid fa-cart-shopping"></i> Grocery <span id="grocery-badge" class="bg-emerald-100 text-emerald-800 text-xs px-1.5 py-0.2 rounded-full ml-0.5 font-bold">0</span>
+            </button>
+        </div>
+
+        <!-- TAB 1: DINNER PLANNER -->
+        <div id="tab-planner" class="space-y-4">
+            <div class="flex justify-between items-center mb-2">
+                <h2 class="text-lg font-bold text-gray-800">Weekly Dinner Schedule</h2>
+                <span class="text-xs text-gray-500 bg-white px-2 py-1 rounded-md border">Assigned to Christian / Katie / Both</span>
+            </div>
+            <div id="days-container" class="space-y-3">
+                <!-- Injected via JS -->
+            </div>
+        </div>
+
+        <!-- TAB 2: RECIPES -->
+        <div id="tab-recipes" class="hidden space-y-4">
+            <div class="flex justify-between items-center">
+                <h2 class="text-lg font-bold text-gray-800">Healthy Recipes & Sides</h2>
+                <button onclick="openAddRecipeModal()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-2 rounded-lg shadow transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-plus"></i> Add Recipe
+                </button>
+            </div>
+            
+            <div class="flex gap-2 overflow-x-auto pb-1 text-xs">
+                <button onclick="filterRecipes('all')" id="filter-all" class="recipe-filter-btn px-3 py-1.5 rounded-full font-medium bg-emerald-600 text-white shadow-sm whitespace-nowrap">All Items</button>
+                <button onclick="filterRecipes('Main')" id="filter-Main" class="recipe-filter-btn px-3 py-1.5 rounded-full font-medium bg-white text-gray-600 border whitespace-nowrap">Main Dishes</button>
+                <button onclick="filterRecipes('Side')" id="filter-Side" class="recipe-filter-btn px-3 py-1.5 rounded-full font-medium bg-white text-gray-600 border whitespace-nowrap">Side Dishes</button>
+            </div>
+
+            <div id="recipes-container" class="space-y-3">
+                <!-- Injected via JS -->
+            </div>
+        </div>
+
+        <!-- TAB 3: GROCERY LIST -->
+        <div id="tab-grocery" class="hidden space-y-4">
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center">
+                <div>
+                    <h2 class="text-lg font-bold text-gray-800">Shopping List</h2>
+                    <p class="text-xs text-gray-500">Auto-generated from your planned weekly dinners</p>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="toggleAllGroceries(true)" class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold px-2.5 py-1.5 rounded-lg border transition">
+                        Check All
+                    </button>
+                    <button onclick="toggleAllGroceries(false)" class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold px-2.5 py-1.5 rounded-lg border transition">
+                        Uncheck All
+                    </button>
+                </div>
+            </div>
+
+            <div id="grocery-container" class="space-y-4 pb-12">
+                <!-- Injected via JS -->
+            </div>
+        </div>
+
+    </main>
+
+    <!-- MODAL: Assign Recipes to Day -->
+    <div id="assign-modal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden animate-slide-up">
+            <div class="p-4 border-b flex justify-between items-center bg-gray-50">
+                <div>
+                    <h3 id="modal-day-title" class="font-bold text-gray-800 text-lg">Assign Dinner</h3>
+                    <p class="text-xs text-gray-500">Select recipes and chef for the night</p>
+                </div>
+                <button onclick="closeAssignModal()" class="w-8 h-8 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center text-gray-700">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            
+            <div class="p-4 space-y-4 overflow-y-auto flex-1">
+                <!-- Chef assignment -->
+                <div>
+                    <label class="block text-xs font-bold text-gray-600 uppercase mb-2">Who's Cooking / Responsible?</label>
+                    <div class="grid grid-cols-3 gap-2">
+                        <button type="button" onclick="setModalChef('Christian')" id="chef-Christian" class="chef-btn py-2 text-xs font-semibold rounded-lg border border-gray-200 bg-white text-gray-700 transition">Christian</button>
+                        <button type="button" onclick="setModalChef('Katie')" id="chef-Katie" class="chef-btn py-2 text-xs font-semibold rounded-lg border border-gray-200 bg-white text-gray-700 transition">Katie</button>
+                        <button type="button" onclick="setModalChef('Both')" id="chef-Both" class="chef-btn py-2 text-xs font-semibold rounded-lg border border-gray-200 bg-white text-gray-700 transition">Both</button>
+                    </div>
+                </div>
+
+                <!-- Recipe selection checklist -->
+                <div>
+                    <label class="block text-xs font-bold text-gray-600 uppercase mb-2">Select Main & Side Dishes</label>
+                    <div id="modal-recipe-list" class="space-y-2 border rounded-xl p-2 max-h-60 overflow-y-auto bg-gray-50">
+                        <!-- Injected via JS -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-4 border-t bg-gray-50 flex gap-2">
+                <button onclick="closeAssignModal()" class="flex-1 py-2.5 border border-gray-300 text-gray-700 font-semibold rounded-xl text-sm bg-white hover:bg-gray-100 transition">Cancel</button>
+                <button onclick="saveDayAssignment()" class="flex-1 py-2.5 bg-emerald-600 text-white font-semibold rounded-xl text-sm shadow-md hover:bg-emerald-700 transition">Save Night</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Add Custom Recipe -->
+    <div id="recipe-modal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+            <div class="p-4 border-b flex justify-between items-center bg-gray-50">
+                <h3 class="font-bold text-gray-800 text-lg">Add New Recipe</h3>
+                <button onclick="closeAddRecipeModal()" class="w-8 h-8 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center text-gray-700">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            
+            <div class="p-4 space-y-3 overflow-y-auto flex-1">
+                <div>
+                    <label class="block text-xs font-bold text-gray-600 mb-1">Recipe Name</label>
+                    <input type="text" id="new-recipe-name" placeholder="e.g., Lemon Herb Salmon" class="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-600 mb-1">Type</label>
+                        <select id="new-recipe-type" class="w-full px-3 py-2 border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                            <option value="Main">Main Dish</option>
+                            <option value="Side">Side Dish</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-600 mb-1">Category</label>
+                        <select id="new-recipe-category" class="w-full px-3 py-2 border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                            <option value="Produce">Produce</option>
+                            <option value="Meat & Seafood">Meat & Seafood</option>
+                            <option value="Dairy & Refrigerated">Dairy & Refrigerated</option>
+                            <option value="Pantry & Spices">Pantry & Spices</option>
+                            <option value="Bakery">Bakery</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-600 mb-1">Ingredients (one per line or comma-separated)</label>
+                    <textarea id="new-recipe-ingredients" rows="4" placeholder="e.g., Salmon fillets, Olive oil, Lemon, Garlic" class="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"></textarea>
+                </div>
+            </div>
+
+            <div class="p-4 border-t bg-gray-50 flex gap-2">
+                <button onclick="closeAddRecipeModal()" class="flex-1 py-2.5 border border-gray-300 text-gray-700 font-semibold rounded-xl text-sm bg-white">Cancel</button>
+                <button onclick="saveNewRecipe()" class="flex-1 py-2.5 bg-emerald-600 text-white font-semibold rounded-xl text-sm shadow-md hover:bg-emerald-700">Save Recipe</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        // Your Firebase Configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyBg7TL-q9wl0XgHHTlKhPx89NH7gpkfGfg",
+            authDomain: "dinnerplanner-eca16.firebaseapp.com",
+            projectId: "dinnerplanner-eca16",
+            storageBucket: "dinnerplanner-eca16.firebasestorage.app",
+            messagingSenderId: "164924334581",
+            appId: "1:164924334581:web:1009ff53cb99ca4d4240bc",
+            measurementId: "G-BD2YLT2LM5"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // Preloaded Healthy Recipes & Sides
+        const initialRecipes = [
+            { id: 'rec-1', name: 'Lemon Herb Grilled Chicken', type: 'Main', category: 'Meat & Seafood', ingredients: ['Chicken breasts (2 lbs)', 'Olive oil', 'Lemon juice', 'Garlic cloves (3)', 'Dried oregano'] },
+            { id: 'rec-2', name: 'Garlic Butter Roasted Asparagus', type: 'Side', category: 'Produce', ingredients: ['Asparagus (1 bunch)', 'Butter (2 tbsp)', 'Minced garlic', 'Parmesan cheese'] },
+            { id: 'rec-3', name: 'Baked Salmon with Quinoa', type: 'Main', category: 'Meat & Seafood', ingredients: ['Salmon fillets (2)', 'Quinoa (1 cup)', 'Broccoli florets (2 cups)', 'Olive oil', 'Soy sauce'] },
+            { id: 'rec-4', name: 'Roasted Sweet Potato Cubes', type: 'Side', category: 'Produce', ingredients: ['Sweet potatoes (2)', 'Olive oil', 'Paprika', 'Salt & black pepper'] },
+            { id: 'rec-5', name: 'Turkey Taco Lettuce Boats', type: 'Main', category: 'Meat & Seafood', ingredients: ['Ground turkey (1 lb)', 'Taco seasoning', 'Romaine lettuce (1 head)', 'Avocado (2)', 'Salsa'] },
+            { id: 'rec-6', name: 'Cilantro Lime Cauliflower Rice', type: 'Side', category: 'Produce', ingredients: ['Cauliflower rice (1 bag)', 'Lime juice', 'Fresh cilantro', 'Olive oil'] },
+            { id: 'rec-7', name: 'Grass-Fed Beef Stir-Fry', type: 'Main', category: 'Meat & Seafood', ingredients: ['Sliced flank steak (1 lb)', 'Bell peppers (2)', 'Snap peas (1 cup)', 'Soy sauce', 'Sesame oil', 'Fresh ginger'] },
+            { id: 'rec-8', name: 'Steamed Jasmine Rice', type: 'Side', category: 'Pantry & Spices', ingredients: ['Jasmine rice (2 cups)', 'Chicken broth (sub for water)'] },
+            { id: 'rec-9', name: 'Mediterranean Greek Salad', type: 'Main', category: 'Produce', ingredients: ['Cucumbers (2)', 'Roma tomatoes (4)', 'Kalamata olives', 'Feta cheese', 'Red onion', 'Extra virgin olive oil'] },
+            { id: 'rec-10', name: 'Garlic Herb Roasted Zucchini', type: 'Side', category: 'Produce', ingredients: ['Zucchini (3)', 'Olive oil', 'Garlic powder', 'Parmesan cheese'] }
+        ];
+
+        const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+        // Default app state
+        let appState = {
+            recipes: initialRecipes,
+            planner: {
+                'Monday': { chef: 'Christian', recipeIds: ['rec-1', 'rec-2'] },
+                'Tuesday': { chef: 'Katie', recipeIds: ['rec-3', 'rec-4'] },
+                'Wednesday': { chef: 'Both', recipeIds: ['rec-5', 'rec-6'] },
+                'Thursday': { chef: 'Christian', recipeIds: ['rec-7', 'rec-8'] },
+                'Friday': { chef: 'Katie', recipeIds: ['rec-9', 'rec-10'] },
+                'Saturday': { chef: 'Both', recipeIds: [] },
+                'Sunday': { chef: 'Both', recipeIds: [] }
+            },
+            checkedGroceries: {}
+        };
+
+        let currentFilter = 'all';
+        let activeModalDay = null;
+        let modalSelectedChef = 'Both';
+        let modalSelectedRecipeIds = [];
+
+        // Setup real-time listener with Firestore
+        const docRef = doc(db, "appData", "sharedPlanner");
+
+        // Listen for remote updates
+        onSnapshot(docRef, (docSnap) => {
+            const dot = document.getElementById('sync-dot');
+            const text = document.getElementById('sync-text');
+            
+            if (docSnap.exists()) {
+                appState = docSnap.data();
+                dot.className = "w-2 h-2 rounded-full bg-emerald-400";
+                text.innerText = "Synced";
+            } else {
+                // Initialize doc if empty
+                setDoc(docRef, appState);
+                dot.className = "w-2 h-2 rounded-full bg-emerald-400";
+                text.innerText = "Synced";
+            }
+            renderAll();
+        },
