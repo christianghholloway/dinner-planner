@@ -270,4 +270,342 @@
                 text.innerText = "Synced";
             }
             renderAll();
-        },
+        }, (error) => {
+            console.error("Firebase sync error:", error);
+            const dot = document.getElementById('sync-dot');
+            const text = document.getElementById('sync-text');
+            dot.className = "w-2 h-2 rounded-full bg-red-400";
+            text.innerText = "Offline Mode";
+        });
+
+        // Save state to Firestore
+        function saveToCloud() {
+            setDoc(docRef, appState).catch((err) => {
+                console.error("Error saving:", err);
+            });
+        }
+
+        // Global functions exposed to window
+        window.switchTab = function(tab) {
+            ['planner', 'recipes', 'grocery'].forEach(t => {
+                document.getElementById(`tab-${t}`).classList.add('hidden');
+                document.getElementById(`btn-${t}`).className = "flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center justify-center gap-2 text-gray-600 hover:text-gray-900";
+            });
+            document.getElementById(`tab-${tab}`).classList.remove('hidden');
+            document.getElementById(`btn-${tab}`).className = "flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 flex items-center justify-center gap-2 bg-emerald-600 text-white shadow-sm";
+        };
+
+        window.openAssignModal = function(day) {
+            activeModalDay = day;
+            const currentDayData = appState.planner[day] || { chef: 'Both', recipeIds: [] };
+            modalSelectedChef = currentDayData.chef || 'Both';
+            modalSelectedRecipeIds = [...(currentDayData.recipeIds || [])];
+
+            document.getElementById('modal-day-title').innerText = `Assign: ${day}`;
+            updateChefUI();
+            renderModalRecipeList();
+            document.getElementById('assign-modal').classList.remove('hidden');
+        };
+
+        window.closeAssignModal = function() {
+            document.getElementById('assign-modal').classList.add('hidden');
+            activeModalDay = null;
+        };
+
+        window.setModalChef = function(chef) {
+            modalSelectedChef = chef;
+            updateChefUI();
+        };
+
+        function updateChefUI() {
+            ['Christian', 'Katie', 'Both'].forEach(c => {
+                const btn = document.getElementById(`chef-${c}`);
+                if (c === modalSelectedChef) {
+                    btn.className = "chef-btn py-2 text-xs font-semibold rounded-lg border-2 border-emerald-600 bg-emerald-50 text-emerald-800 shadow-sm transition";
+                } else {
+                    btn.className = "chef-btn py-2 text-xs font-semibold rounded-lg border border-gray-200 bg-white text-gray-700 transition";
+                }
+            });
+        }
+
+        function renderModalRecipeList() {
+            const container = document.getElementById('modal-recipe-list');
+            container.innerHTML = appState.recipes.map(r => {
+                const isChecked = modalSelectedRecipeIds.includes(r.id);
+                return `
+                    <label class="flex items-center justify-between p-2 rounded-lg bg-white border ${isChecked ? 'border-emerald-500 bg-emerald-50/50' : 'border-gray-200'} cursor-pointer hover:border-gray-300">
+                        <div class="flex items-center gap-2.5">
+                            <input type="checkbox" ${isChecked ? 'checked' : ''} onchange="toggleModalRecipe('${r.id}')" class="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500">
+                            <div>
+                                <span class="text-sm font-medium text-gray-800">${r.name}</span>
+                                <span class="text-[10px] ml-2 px-1.5 py-0.5 rounded ${r.type === 'Main' ? 'bg-purple-100 text-purple-700' : 'bg-amber-100 text-amber-700'}">${r.type}</span>
+                            </div>
+                        </div>
+                    </label>
+                `;
+            }).join('');
+        }
+
+        window.toggleModalRecipe = function(id) {
+            if (modalSelectedRecipeIds.includes(id)) {
+                modalSelectedRecipeIds = modalSelectedRecipeIds.filter(i => i !== id);
+            } else {
+                modalSelectedRecipeIds.push(id);
+            }
+            renderModalRecipeList();
+        };
+
+        window.saveDayAssignment = function() {
+            if (!activeModalDay) return;
+            appState.planner[activeModalDay] = {
+                chef: modalSelectedChef,
+                recipeIds: modalSelectedRecipeIds
+            };
+            saveToCloud();
+            closeAssignModal();
+        };
+
+        window.openAddRecipeModal = function() {
+            document.getElementById('new-recipe-name').value = '';
+            document.getElementById('new-recipe-ingredients').value = '';
+            document.getElementById('recipe-modal').classList.remove('hidden');
+        };
+
+        window.closeAddRecipeModal = function() {
+            document.getElementById('recipe-modal').classList.add('hidden');
+        };
+
+        window.saveNewRecipe = function() {
+            const name = document.getElementById('new-recipe-name').value.trim();
+            const type = document.getElementById('new-recipe-type').value;
+            const category = document.getElementById('new-recipe-category').value;
+            const ingText = document.getElementById('new-recipe-ingredients').value.trim();
+
+            if (!name) {
+                alert('Please enter a recipe name.');
+                return;
+            }
+
+            const ingredients = ingText ? ingText.split(/[\n,]+/).map(i => i.trim()).filter(Boolean) : [];
+            const newRec = {
+                id: 'rec-' + Date.now(),
+                name,
+                type,
+                category,
+                ingredients
+            };
+
+            appState.recipes.push(newRec);
+            saveToCloud();
+            closeAddRecipeModal();
+        };
+
+        window.deleteRecipe = function(id) {
+            if (confirm('Delete this recipe? It will also be removed from any dinner nights using it.')) {
+                appState.recipes = appState.recipes.filter(r => r.id !== id);
+                Object.keys(appState.planner).forEach(day => {
+                    if (appState.planner[day].recipeIds) {
+                        appState.planner[day].recipeIds = appState.planner[day].recipeIds.filter(rId => rId !== id);
+                    }
+                });
+                saveToCloud();
+            }
+        };
+
+        window.filterRecipes = function(type) {
+            currentFilter = type;
+            document.querySelectorAll('.recipe-filter-btn').forEach(btn => {
+                btn.className = "recipe-filter-btn px-3 py-1.5 rounded-full font-medium bg-white text-gray-600 border whitespace-nowrap";
+            });
+            document.getElementById(`filter-${type}`).className = "recipe-filter-btn px-3 py-1.5 rounded-full font-medium bg-emerald-600 text-white shadow-sm whitespace-nowrap";
+            renderRecipes();
+        };
+
+        window.toggleGroceryItem = function(itemKey) {
+            appState.checkedGroceries[itemKey] = !appState.checkedGroceries[itemKey];
+            saveToCloud();
+        };
+
+        window.toggleAllGroceries = function(checkState) {
+            const list = generateGroceryList();
+            Object.values(list).forEach(items => {
+                items.forEach(item => {
+                    appState.checkedGroceries[item.key] = checkState;
+                });
+            });
+            saveToCloud();
+        };
+
+        function generateGroceryList() {
+            const categories = {
+                'Produce': [],
+                'Meat & Seafood': [],
+                'Dairy & Refrigerated': [],
+                'Pantry & Spices': [],
+                'Bakery': []
+            };
+
+            const activeRecipeIds = new Set();
+            Object.values(appState.planner).forEach(dayObj => {
+                if (dayObj.recipeIds) {
+                    dayObj.recipeIds.forEach(id => activeRecipeIds.add(id));
+                }
+            });
+
+            activeRecipeIds.forEach(rId => {
+                const recipe = appState.recipes.find(r => r.id === rId);
+                if (recipe && recipe.ingredients) {
+                    const cat = categories[recipe.category] ? recipe.category : 'Pantry & Spices';
+                    recipe.ingredients.forEach(ing => {
+                        const key = `${cat}___${ing.toLowerCase()}`;
+                        categories[cat].push({ name: ing, key, recipeName: recipe.name });
+                    });
+                }
+            });
+
+            return categories;
+        }
+
+        function renderAll() {
+            renderPlanner();
+            renderRecipes();
+            renderGrocery();
+        }
+
+        function renderPlanner() {
+            const container = document.getElementById('days-container');
+            container.innerHTML = daysOfWeek.map(day => {
+                const dayData = appState.planner[day] || { chef: 'Both', recipeIds: [] };
+                const chefColor = dayData.chef === 'Christian' ? 'bg-blue-100 text-blue-700 border-blue-200' :
+                                  dayData.chef === 'Katie' ? 'bg-pink-100 text-pink-700 border-pink-200' : 
+                                  'bg-amber-100 text-amber-700 border-amber-200';
+
+                const recipesHtml = dayData.recipeIds && dayData.recipeIds.length > 0 ? 
+                    dayData.recipeIds.map(rId => {
+                        const rec = appState.recipes.find(r => r.id === rId);
+                        if (!rec) return '';
+                        const badgeColor = rec.type === 'Main' ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200';
+                        return `
+                            <div class="flex items-center justify-between py-1.5 px-2.5 rounded-lg border ${badgeColor} text-xs mb-1">
+                                <span class="font-medium truncate"><i class="fa-solid ${rec.type === 'Main' ? 'fa-bowl-food' : 'fa-carrot'} mr-1.5 opacity-75"></i>${rec.name}</span>
+                                <span class="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-white/60">${rec.type}</span>
+                            </div>
+                        `;
+                    }).join('') : 
+                    `<p class="text-xs text-gray-400 italic py-1">No recipes assigned yet.</p>`;
+
+                return `
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-3.5 hover:border-gray-200 transition">
+                        <div class="flex justify-between items-center mb-2.5">
+                            <h3 class="font-bold text-gray-800 text-base">${day}</h3>
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs px-2.5 py-0.5 rounded-full font-semibold border ${chefColor}">
+                                    <i class="fa-solid fa-user text-[10px] mr-1"></i>${dayData.chef}
+                                </span>
+                                <button onclick="openAssignModal('${day}')" class="bg-gray-100 hover:bg-emerald-50 hover:text-emerald-600 text-gray-600 w-7 h-7 rounded-lg flex items-center justify-center transition shadow-xs">
+                                    <i class="fa-solid fa-pen text-xs"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="space-y-1">
+                            ${recipesHtml}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderRecipes() {
+            const container = document.getElementById('recipes-container');
+            const filtered = appState.recipes.filter(r => currentFilter === 'all' || r.type === currentFilter);
+
+            if (filtered.length === 0) {
+                container.innerHTML = `<div class="text-center py-8 text-gray-400 text-sm">No recipes found.</div>`;
+                return;
+            }
+
+            container.innerHTML = filtered.map(r => `
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 relative group">
+                    <div class="flex justify-between items-start mb-1.5">
+                        <div>
+                            <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${r.type === 'Main' ? 'bg-purple-100 text-purple-700' : 'bg-amber-100 text-amber-700'}">${r.type} Dish</span>
+                            <span class="text-[10px] text-gray-500 ml-1.5"><i class="fa-solid fa-tag mr-1"></i>${r.category}</span>
+                            <h3 class="font-bold text-gray-800 text-base mt-1">${r.name}</h3>
+                        </div>
+                        <button onclick="deleteRecipe('${r.id}')" class="text-gray-300 hover:text-red-500 p-1 transition">
+                            <i class="fa-solid fa-trash-can text-xs"></i>
+                        </button>
+                    </div>
+                    <div class="mt-2 text-xs text-gray-600 bg-gray-50 p-2.5 rounded-lg border border-gray-100">
+                        <span class="font-semibold block text-gray-700 mb-1"><i class="fa-solid fa-basket-shopping mr-1"></i> Ingredients:</span>
+                        <ul class="list-disc list-inside space-y-0.5 text-gray-600">
+                            ${r.ingredients && r.ingredients.length > 0 ? r.ingredients.map(ing => `<li>${ing}</li>`).join('') : '<li class="italic text-gray-400">No ingredients listed</li>'}
+                        </ul>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderGrocery() {
+            const container = document.getElementById('grocery-container');
+            const list = generateGroceryList();
+            
+            let totalItems = 0;
+            let checkedCount = 0;
+
+            Object.values(list).forEach(items => {
+                totalItems += items.length;
+                items.forEach(item => {
+                    if (appState.checkedGroceries[item.key]) checkedCount++;
+                });
+            });
+
+            document.getElementById('grocery-badge').innerText = `${totalItems - checkedCount}`;
+
+            const categoriesKeys = Object.keys(list);
+            let hasAnyItems = totalItems > 0;
+
+            if (!hasAnyItems) {
+                container.innerHTML = `
+                    <div class="bg-white rounded-xl p-8 text-center border border-gray-100 shadow-sm">
+                        <i class="fa-solid fa-basket-shopping text-3xl text-gray-300 mb-2"></i>
+                        <p class="text-gray-500 font-medium text-sm">Your grocery list is empty!</p>
+                        <p class="text-gray-400 text-xs mt-1">Assign recipes to your weekly dinner planner to auto-populate ingredients.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = categoriesKeys.map(cat => {
+                const items = list[cat];
+                if (items.length === 0) return '';
+
+                return `
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                        <div class="bg-gray-50 px-4 py-2.5 border-b border-gray-100 flex justify-between items-center">
+                            <h3 class="font-bold text-gray-700 text-sm flex items-center gap-2">
+                                <i class="fa-solid fa-folder-open text-emerald-600"></i> ${cat}
+                            </h3>
+                            <span class="text-xs text-gray-400 bg-white px-2 py-0.5 rounded-md border">${items.length} items</span>
+                        </div>
+                        <div class="divide-y divide-gray-50">
+                            ${items.map(item => {
+                                const isChecked = !!appState.checkedGroceries[item.key];
+                                return `
+                                    <label class="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50/80 transition ${isChecked ? 'bg-gray-50/50 opacity-60' : ''}">
+                                        <div class="flex items-center gap-3">
+                                            <input type="checkbox" ${isChecked ? 'checked' : ''} onchange="toggleGroceryItem('${item.key}')" class="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500">
+                                            <span class="text-sm ${isChecked ? 'line-through text-gray-400' : 'text-gray-800 font-medium'}">${item.name}</span>
+                                        </div>
+                                        <span class="text-[10px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full truncate max-w-[120px]">For: ${item.recipeName}</span>
+                                    </label>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+    </script>
+</body>
+</html>
