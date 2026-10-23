@@ -86,12 +86,26 @@
 
         <!-- TAB 3: GROCERY LIST -->
         <div id="tab-grocery" class="hidden space-y-4">
-            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col gap-3">
+            <!-- Add Custom Grocery Item Box -->
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 space-y-3">
                 <div>
                     <h2 class="text-lg font-bold text-gray-800">Shopping List</h2>
-                    <p class="text-xs text-gray-500">Auto-generated from your planned weekly dinners</p>
+                    <p class="text-xs text-gray-500">Auto-generated from dinners + custom items</p>
                 </div>
-                <div class="flex gap-2 flex-wrap">
+                <div class="flex gap-2">
+                    <input type="text" id="custom-grocery-name" placeholder="Add extra item (e.g. Coffee, Paper towels)" class="flex-1 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    <select id="custom-grocery-category" class="px-2 py-2 border rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                        <option value="Produce">Produce</option>
+                        <option value="Meat & Seafood">Meat & Seafood</option>
+                        <option value="Dairy & Refrigerated">Dairy & Refrigerated</option>
+                        <option value="Pantry & Spices">Pantry & Spices</option>
+                        <option value="Bakery">Bakery</option>
+                    </select>
+                    <button onclick="addCustomGrocery()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-sm font-semibold shadow transition">
+                        <i class="fa-solid fa-plus"></i>
+                    </button>
+                </div>
+                <div class="flex gap-2 flex-wrap pt-1 border-t border-gray-100">
                     <button onclick="toggleAllGroceries(true)" class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold px-2.5 py-1.5 rounded-lg border transition">
                         Check All
                     </button>
@@ -246,7 +260,9 @@
                 'Saturday': { chef: 'Both', recipeIds: [] },
                 'Sunday': { chef: 'Both', recipeIds: [] }
             },
-            checkedGroceries: {}
+            checkedGroceries: {},
+            dismissedGroceries: {},
+            customGroceries: []
         };
 
         let currentFilter = 'all';
@@ -264,10 +280,11 @@
             
             if (docSnap.exists()) {
                 appState = docSnap.data();
+                if (!appState.dismissedGroceries) appState.dismissedGroceries = {};
+                if (!appState.customGroceries) appState.customGroceries = [];
                 dot.className = "w-2 h-2 rounded-full bg-emerald-400";
                 text.innerText = "Synced";
             } else {
-                // Initialize doc if empty
                 setDoc(docRef, appState);
                 dot.className = "w-2 h-2 rounded-full bg-emerald-400";
                 text.innerText = "Synced";
@@ -318,6 +335,13 @@
         window.setModalChef = function(chef) {
             modalSelectedChef = chef;
             updateChefUI();
+        };
+
+        window.clearDayPlanner = function(day) {
+            if (confirm(`Clear all dinner assignments for ${day}?`)) {
+                appState.planner[day] = { chef: 'Both', recipeIds: [] };
+                saveToCloud();
+            }
         };
 
         function updateChefUI() {
@@ -439,12 +463,40 @@
             saveToCloud();
         };
 
+        window.addCustomGrocery = function() {
+            const nameInput = document.getElementById('custom-grocery-name');
+            const catSelect = document.getElementById('custom-grocery-category');
+            const name = nameInput.value.trim();
+            if (!name) return;
+
+            if (!appState.customGroceries) appState.customGroceries = [];
+            appState.customGroceries.push({
+                id: 'custom-' + Date.now(),
+                name,
+                category: catSelect.value
+            });
+
+            nameInput.value = '';
+            saveToCloud();
+        };
+
         window.clearCheckedGroceries = function() {
-            // Uncheck/remove all currently checked items from state
-            Object.keys(appState.checkedGroceries).forEach(key => {
-                if (appState.checkedGroceries[key]) {
-                    delete appState.checkedGroceries[key];
-                }
+            if (!appState.dismissedGroceries) appState.dismissedGroceries = {};
+            
+            const list = generateGroceryList();
+            Object.values(list).forEach(items => {
+                items.forEach(item => {
+                    if (appState.checkedGroceries[item.key]) {
+                        // If it's a custom item, remove it from customGroceries array entirely
+                        if (item.isCustom) {
+                            appState.customGroceries = appState.customGroceries.filter(c => c.id !== item.customId);
+                        } else {
+                            // Otherwise dismiss it from recipe ingredients view
+                            appState.dismissedGroceries[item.key] = true;
+                        }
+                        delete appState.checkedGroceries[item.key];
+                    }
+                });
             });
             saveToCloud();
         };
@@ -458,6 +510,7 @@
                 'Bakery': []
             };
 
+            // 1. Add recipe ingredients
             const activeRecipeIds = new Set();
             Object.values(appState.planner).forEach(dayObj => {
                 if (dayObj.recipeIds) {
@@ -471,10 +524,21 @@
                     const cat = categories[recipe.category] ? recipe.category : 'Pantry & Spices';
                     recipe.ingredients.forEach(ing => {
                         const key = `${cat}___${ing.toLowerCase()}`;
-                        categories[cat].push({ name: ing, key, recipeName: recipe.name });
+                        if (!appState.dismissedGroceries || !appState.dismissedGroceries[key]) {
+                            categories[cat].push({ name: ing, key, recipeName: recipe.name, isCustom: false });
+                        }
                     });
                 }
             });
+
+            // 2. Add custom groceries
+            if (appState.customGroceries) {
+                appState.customGroceries.forEach(item => {
+                    const cat = categories[item.category] ? item.category : 'Pantry & Spices';
+                    const key = `custom___${item.id}`;
+                    categories[cat].push({ name: item.name, key, recipeName: 'Extra Item', isCustom: true, customId: item.id });
+                });
+            }
 
             return categories;
         }
@@ -511,12 +575,15 @@
                     <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-3.5 hover:border-gray-200 transition">
                         <div class="flex justify-between items-center mb-2.5">
                             <h3 class="font-bold text-gray-800 text-base">${day}</h3>
-                            <div class="flex items-center gap-2">
+                            <div class="flex items-center gap-1.5">
                                 <span class="text-xs px-2.5 py-0.5 rounded-full font-semibold border ${chefColor}">
                                     <i class="fa-solid fa-user text-[10px] mr-1"></i>${dayData.chef}
                                 </span>
-                                <button onclick="openAssignModal('${day}')" class="bg-gray-100 hover:bg-emerald-50 hover:text-emerald-600 text-gray-600 w-7 h-7 rounded-lg flex items-center justify-center transition shadow-xs">
+                                <button onclick="openAssignModal('${day}')" title="Edit Dinner" class="bg-gray-100 hover:bg-emerald-50 hover:text-emerald-600 text-gray-600 w-7 h-7 rounded-lg flex items-center justify-center transition shadow-xs">
                                     <i class="fa-solid fa-pen text-xs"></i>
+                                </button>
+                                <button onclick="clearDayPlanner('${day}')" title="Clear Day" class="bg-gray-100 hover:bg-red-50 hover:text-red-500 text-gray-400 w-7 h-7 rounded-lg flex items-center justify-center transition shadow-xs">
+                                    <i class="fa-solid fa-rotate-left text-xs"></i>
                                 </button>
                             </div>
                         </div>
@@ -583,7 +650,7 @@
                     <div class="bg-white rounded-xl p-8 text-center border border-gray-100 shadow-sm">
                         <i class="fa-solid fa-basket-shopping text-3xl text-gray-300 mb-2"></i>
                         <p class="text-gray-500 font-medium text-sm">Your grocery list is empty!</p>
-                        <p class="text-gray-400 text-xs mt-1">Assign recipes to your weekly dinner planner to auto-populate ingredients.</p>
+                        <p class="text-gray-400 text-xs mt-1">Assign recipes or add custom items above.</p>
                     </div>
                 `;
                 return;
