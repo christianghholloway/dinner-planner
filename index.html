@@ -86,23 +86,16 @@
 
         <!-- TAB 3: GROCERY LIST -->
         <div id="tab-grocery" class="hidden space-y-4">
-            <!-- Add Custom Grocery Item Box -->
+            <!-- Add Custom Grocery Item Box (Smart Auto-Categorized) -->
             <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 space-y-3">
                 <div>
                     <h2 class="text-lg font-bold text-gray-800">Shopping List</h2>
                     <p class="text-xs text-gray-500">Auto-generated from dinners + custom items</p>
                 </div>
                 <div class="flex gap-2">
-                    <input type="text" id="custom-grocery-name" placeholder="Add extra item (e.g. Coffee, Paper towels)" class="flex-1 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
-                    <select id="custom-grocery-category" class="px-2 py-2 border rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
-                        <option value="Produce">Produce</option>
-                        <option value="Meat & Seafood">Meat & Seafood</option>
-                        <option value="Dairy & Refrigerated">Dairy & Refrigerated</option>
-                        <option value="Pantry & Spices">Pantry & Spices</option>
-                        <option value="Bakery">Bakery</option>
-                    </select>
-                    <button onclick="addCustomGrocery()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-sm font-semibold shadow transition">
-                        <i class="fa-solid fa-plus"></i>
+                    <input type="text" id="custom-grocery-name" placeholder="Type item (e.g., Milk, Coffee, Apples)..." class="flex-1 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" onkeypress="if(event.key === 'Enter') addCustomGrocery()">
+                    <button onclick="addCustomGrocery()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow transition flex items-center gap-1.5 whitespace-nowrap">
+                        <i class="fa-solid fa-plus"></i> Add
                     </button>
                 </div>
                 <div class="flex gap-2 flex-wrap pt-1 border-t border-gray-100">
@@ -269,6 +262,23 @@
         let activeModalDay = null;
         let modalSelectedChef = 'Both';
         let modalSelectedRecipeIds = [];
+
+        // Smart Grocery Auto-Categorization Helper
+        function autoCategorize(itemName) {
+            const lower = itemName.toLowerCase();
+            
+            const produceKeywords = ['apple', 'banana', 'orange', 'lemon', 'lime', 'avocado', 'tomato', 'lettuce', 'spinach', 'onion', 'garlic', 'potato', 'cucumber', 'carrot', 'celery', 'berry', 'fruit', 'vegetable', 'cilantro', 'ginger', 'squash', 'zucchini', 'asparagus', 'mushroom', 'pepper', 'broccoli', 'cauliflower', 'herb', 'scallion', 'cabbage', 'kale', 'grape', 'peach', 'melon'];
+            const meatKeywords = ['chicken', 'beef', 'steak', 'turkey', 'pork', 'bacon', 'salmon', 'shrimp', 'fish', 'meat', 'ground', 'sausage', 'lamb', 'chop', 'fillet', 'breast', 'thigh', 'patty'];
+            const dairyKeywords = ['milk', 'cheese', 'butter', 'yogurt', 'cream', 'egg', 'sour cream', 'cottage cheese', 'parmesan', 'feta', 'mozzarella', 'cheddar', 'ice cream', 'almond milk', 'oat milk', 'half and half'];
+            const bakeryKeywords = ['bread', 'bagel', 'tortilla', 'bun', 'roll', 'muffin', 'pita', 'croissant', 'pastry', 'naan', 'wrap', 'cake'];
+
+            if (produceKeywords.some(kw => lower.includes(kw))) return 'Produce';
+            if (meatKeywords.some(kw => lower.includes(kw))) return 'Meat & Seafood';
+            if (dairyKeywords.some(kw => lower.includes(kw))) return 'Dairy & Refrigerated';
+            if (bakeryKeywords.some(kw => lower.includes(kw))) return 'Bakery';
+            
+            return 'Pantry & Spices'; // default fallback for canned goods, coffee, paper towels, snacks, etc.
+        }
 
         // Setup real-time listener with Firestore
         const docRef = doc(db, "appData", "sharedPlanner");
@@ -465,15 +475,16 @@
 
         window.addCustomGrocery = function() {
             const nameInput = document.getElementById('custom-grocery-name');
-            const catSelect = document.getElementById('custom-grocery-category');
             const name = nameInput.value.trim();
             if (!name) return;
+
+            const category = autoCategorize(name);
 
             if (!appState.customGroceries) appState.customGroceries = [];
             appState.customGroceries.push({
                 id: 'custom-' + Date.now(),
                 name,
-                category: catSelect.value
+                category
             });
 
             nameInput.value = '';
@@ -487,11 +498,9 @@
             Object.values(list).forEach(items => {
                 items.forEach(item => {
                     if (appState.checkedGroceries[item.key]) {
-                        // If it's a custom item, remove it from customGroceries array entirely
                         if (item.isCustom) {
                             appState.customGroceries = appState.customGroceries.filter(c => c.id !== item.customId);
                         } else {
-                            // Otherwise dismiss it from recipe ingredients view
                             appState.dismissedGroceries[item.key] = true;
                         }
                         delete appState.checkedGroceries[item.key];
@@ -510,7 +519,7 @@
                 'Bakery': []
             };
 
-            // 1. Add recipe ingredients
+            // 1. Add recipe ingredients (auto-categorized by recipe category)
             const activeRecipeIds = new Set();
             Object.values(appState.planner).forEach(dayObj => {
                 if (dayObj.recipeIds) {
@@ -531,7 +540,7 @@
                 }
             });
 
-            // 2. Add custom groceries
+            // 2. Add custom groceries (auto-categorized by keyword)
             if (appState.customGroceries) {
                 appState.customGroceries.forEach(item => {
                     const cat = categories[item.category] ? item.category : 'Pantry & Spices';
@@ -650,7 +659,7 @@
                     <div class="bg-white rounded-xl p-8 text-center border border-gray-100 shadow-sm">
                         <i class="fa-solid fa-basket-shopping text-3xl text-gray-300 mb-2"></i>
                         <p class="text-gray-500 font-medium text-sm">Your grocery list is empty!</p>
-                        <p class="text-gray-400 text-xs mt-1">Assign recipes or add custom items above.</p>
+                        <p class="text-gray-400 text-xs mt-1">Assign recipes or type custom items above.</p>
                     </div>
                 `;
                 return;
